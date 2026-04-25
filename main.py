@@ -25,6 +25,7 @@ except ImportError:
 
 # Constants
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/models"
+OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
 def get_picoclaw_config_path() -> Path:
@@ -107,6 +108,50 @@ def get_api_key() -> Optional[str]:
     """Get the first available OpenRouter API key."""
     keys = get_api_keys()
     return keys[0] if keys else None
+
+
+def test_model(api_key: str, model_id: str) -> tuple[bool, Optional[str]]:
+    """Test if a model is available by making a minimal API call.
+    Returns (success, error_type).
+    """
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/Shaivpidadi/FreeRide",
+        "X-Title": "FreeRide Health Check",
+    }
+    payload = {
+        "model": model_id,
+        "messages": [{"role": "user", "content": "Hi"}],
+        "max_tokens": 5,
+        "stream": False,
+    }
+    try:
+        response = requests.post(
+            OPENROUTER_CHAT_URL, headers=headers, json=payload, timeout=30
+        )
+        if response.status_code == 200:
+            return True, None
+        elif response.status_code == 401:
+            return False, "invalid_key"
+        elif response.status_code == 429:
+            return False, "rate_limit"
+        elif response.status_code == 503:
+            return False, "unavailable"
+        else:
+            try:
+                body = response.json()
+                err_code = body.get("error", {}).get("code", "")
+                err_msg = str(body.get("error", {}).get("message", ""))
+                if err_code == "model_not_found" or "Unknown model" in err_msg:
+                    return False, "model_not_found"
+            except Exception:
+                pass
+            return False, f"error_{response.status_code}"
+    except requests.Timeout:
+        return False, "timeout"
+    except requests.RequestException as e:
+        return False, "request_error"
 
 
 def fetch_all_models(api_key: str) -> list:
@@ -638,17 +683,37 @@ def cmd_auto(args):
         print("Error: No free models available.")
         sys.exit(1)
 
-    # Find best SPECIFIC model (skip openrouter/free router)
-    # openrouter/free is a router, not a specific model - use it as fallback only
+    # Test top models and pick the first available one (pre-flight health check)
     best_model = None
+    tested = 0
+    max_tests = 5  # Don't test more than 5 models to avoid excessive API calls
+
+    print("Testing top models for availability...")
     for m in models:
-        if "openrouter/free" not in m["id"]:
-            best_model = m
+        if "openrouter/free" in m["id"]:
+            continue
+        if tested >= max_tests:
             break
 
+        model_id = m["id"]
+        print(f"  Testing {model_id}...", end=" ", flush=True)
+        success, error = test_model(api_key, model_id)
+        tested += 1
+
+        if success:
+            print("OK")
+            best_model = m
+            break
+        elif error == "rate_limit":
+            print("rate limited, skipping")
+        elif error == "model_not_found":
+            print("not found, skipping")
+        else:
+            print(f"{error}, skipping")
+
     if not best_model:
-        # Fallback to first model if all are routers (unlikely)
-        best_model = models[0]
+        print("All top models unavailable, using openrouter/free as primary")
+        best_model = {"id": "openrouter/free", "context_length": 0, "_score": 0}
 
     model_id = best_model["id"]
     context = best_model.get("context_length", 0)

@@ -33,6 +33,7 @@ from main import (
     format_model_for_picoclaw,
     ensure_model_in_list,
     get_picoclaw_config_path,
+    test_model,
 )
 
 
@@ -52,7 +53,6 @@ DEAD_MODEL_TTL_HOURS = (
     24  # Retry dead models after 24h (OpenRouter sometimes brings them back)
 )
 CHECK_INTERVAL_SECONDS = 60
-OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
 def load_state() -> dict:
@@ -193,57 +193,6 @@ def test_model_with_keys(state: dict, model_id: str) -> tuple[bool, Optional[str
         break  # model-level error (not_found, 503, etc.), no point trying more keys
 
     return False, last_error
-
-
-def test_model(api_key: str, model_id: str) -> tuple[bool, Optional[str]]:
-    """
-    Test if a model is available by making a minimal API call.
-    Returns (success, error_type).
-    """
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://github.com/Shaivpidadi/FreeRide",
-        "X-Title": "FreeRide Health Check",
-    }
-
-    payload = {
-        "model": model_id,
-        "messages": [{"role": "user", "content": "Hi"}],
-        "max_tokens": 5,
-        "stream": False,
-    }
-
-    try:
-        response = requests.post(
-            OPENROUTER_CHAT_URL, headers=headers, json=payload, timeout=30
-        )
-
-        if response.status_code == 200:
-            return True, None
-        elif response.status_code == 401:
-            return False, "invalid_key"
-        elif response.status_code == 429:
-            return False, "rate_limit"
-        elif response.status_code == 503:
-            return False, "unavailable"
-        else:
-            # OpenRouter returns model_not_found as a JSON error code — can appear
-            # on 400, 404, or other 4xx. Check the body regardless of status.
-            try:
-                body = response.json()
-                err_code = body.get("error", {}).get("code", "")
-                err_msg = str(body.get("error", {}).get("message", ""))
-                if err_code == "model_not_found" or "Unknown model" in err_msg:
-                    return False, "model_not_found"
-            except Exception:
-                pass
-            return False, f"error_{response.status_code}"
-
-    except requests.Timeout:
-        return False, "timeout"
-    except requests.RequestException as e:
-        return False, "request_error"
 
 
 def get_next_available_model(state: dict, exclude_model: str = None) -> Optional[str]:
