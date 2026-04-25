@@ -306,7 +306,7 @@ def ensure_model_in_list(
     entry = {
         "model_name": formatted_name,
         "provider": "openrouter",
-        "model": native_model,
+        "model": format_model_for_picoclaw(model_id, with_provider_prefix=True),
         "api_keys": api_keys,
     }
     if fallbacks is not None:
