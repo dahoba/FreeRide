@@ -17,7 +17,9 @@ from typing import Optional
 try:
     import requests
 except ImportError:
-    print("Error: requests library required")
+    print(
+        "Error: requests library required. Install with: uv pip install requests (or pip install requests)"
+    )
     sys.exit(1)
 
 
@@ -25,41 +27,58 @@ except ImportError:
 from main import (
     get_api_keys,
     get_free_models,
-    load_openclaw_config,
-    save_openclaw_config,
+    load_picoclaw_config,
+    save_picoclaw_config,
     ensure_config_structure,
-    format_model_for_openclaw,
-    OPENCLAW_CONFIG_PATH
+    format_model_for_picoclaw,
+    ensure_model_in_list,
+    get_picoclaw_config_path,
 )
 
 
 # Constants
-STATE_FILE = Path.home() / ".openclaw" / ".freeride-watcher-state.json"
+def get_state_file_path() -> Path:
+    env_home = os.environ.get("PICOCLAW_HOME")
+    if env_home:
+        base_dir = Path(env_home)
+    else:
+        base_dir = Path.home() / ".picoclaw"
+    return base_dir / ".freeride-watcher-state.json"
+
+
 RATE_LIMIT_COOLDOWN_MINUTES = 30
 KEY_RATE_LIMIT_COOLDOWN_MINUTES = 2  # Per-minute key limits reset quickly
-DEAD_MODEL_TTL_HOURS = 24            # Retry dead models after 24h (OpenRouter sometimes brings them back)
+DEAD_MODEL_TTL_HOURS = (
+    24  # Retry dead models after 24h (OpenRouter sometimes brings them back)
+)
 CHECK_INTERVAL_SECONDS = 60
 OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
 def load_state() -> dict:
     """Load watcher state."""
-    if STATE_FILE.exists():
+    if get_state_file_path().exists():
         try:
-            state = json.loads(STATE_FILE.read_text())
+            state = json.loads(get_state_file_path().read_text())
             state.setdefault("rate_limited_keys", {})
             state.setdefault("dead_models", {})
             state.setdefault("invalid_keys", [])
             return state
         except json.JSONDecodeError:
             pass
-    return {"rate_limited_models": {}, "rate_limited_keys": {}, "dead_models": {}, "invalid_keys": [], "rotation_count": 0}
+    return {
+        "rate_limited_models": {},
+        "rate_limited_keys": {},
+        "dead_models": {},
+        "invalid_keys": [],
+        "rotation_count": 0,
+    }
 
 
 def save_state(state: dict):
     """Save watcher state."""
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(json.dumps(state, indent=2))
+    get_state_file_path().parent.mkdir(parents=True, exist_ok=True)
+    get_state_file_path().write_text(json.dumps(state, indent=2))
 
 
 def is_model_rate_limited(state: dict, model_id: str) -> bool:
@@ -88,7 +107,9 @@ def is_key_rate_limited(state: dict, key: str) -> bool:
     if key_id not in rate_limited:
         return False
     limited_at = datetime.fromisoformat(rate_limited[key_id])
-    return datetime.now() < limited_at + timedelta(minutes=KEY_RATE_LIMIT_COOLDOWN_MINUTES)
+    return datetime.now() < limited_at + timedelta(
+        minutes=KEY_RATE_LIMIT_COOLDOWN_MINUTES
+    )
 
 
 def mark_key_rate_limited(state: dict, key: str):
@@ -113,7 +134,9 @@ def mark_key_invalid(state: dict, key: str):
     if key_id not in state["invalid_keys"]:
         state["invalid_keys"].append(key_id)
         save_state(state)
-        print(f"  WARNING: Key ...{key_id} returned 401 — invalid or revoked. Skipping.")
+        print(
+            f"  WARNING: Key ...{key_id} returned 401 — invalid or revoked. Skipping."
+        )
 
 
 def is_model_dead(state: dict, model_id: str) -> bool:
@@ -181,22 +204,19 @@ def test_model(api_key: str, model_id: str) -> tuple[bool, Optional[str]]:
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://github.com/Shaivpidadi/FreeRide",
-        "X-Title": "FreeRide Health Check"
+        "X-Title": "FreeRide Health Check",
     }
 
     payload = {
         "model": model_id,
         "messages": [{"role": "user", "content": "Hi"}],
         "max_tokens": 5,
-        "stream": False
+        "stream": False,
     }
 
     try:
         response = requests.post(
-            OPENROUTER_CHAT_URL,
-            headers=headers,
-            json=payload,
-            timeout=30
+            OPENROUTER_CHAT_URL, headers=headers, json=payload, timeout=30
         )
 
         if response.status_code == 200:
@@ -255,7 +275,9 @@ def get_next_available_model(state: dict, exclude_model: str = None) -> Optional
     return None
 
 
-def rotate_to_next_model(state: dict, reason: str = "manual", force_refresh: bool = False):
+def rotate_to_next_model(
+    state: dict, reason: str = "manual", force_refresh: bool = False
+):
     """Rotate to the next available model.
 
     Tests candidates live before writing to config — no stale model IDs end up
@@ -266,14 +288,16 @@ def rotate_to_next_model(state: dict, reason: str = "manual", force_refresh: boo
         print("  Error: All API keys are rate limited!")
         return False
 
-    config = load_openclaw_config()
+    config = load_picoclaw_config()
     config = ensure_config_structure(config)
-    current = config.get("agents", {}).get("defaults", {}).get("model", {}).get("primary")
+    current = (
+        config.get("agents", {}).get("defaults", {}).get("model", {}).get("primary")
+    )
 
     current_base = None
     if current:
         if current.startswith("openrouter/"):
-            current_base = current[len("openrouter/"):]
+            current_base = current[len("openrouter/") :]
         else:
             current_base = current
 
@@ -311,20 +335,26 @@ def rotate_to_next_model(state: dict, reason: str = "manual", force_refresh: boo
     new_primary = working[0]
     print(f"  New model: {new_primary}")
 
-    formatted_primary = format_model_for_openclaw(new_primary, with_provider_prefix=True)
+    api_keys = get_api_keys()
+    formatted_primary = format_model_for_picoclaw(
+        new_primary, with_provider_prefix=True
+    )
     config["agents"]["defaults"]["model"]["primary"] = formatted_primary
-    config["agents"]["defaults"]["models"][format_model_for_openclaw(new_primary, with_provider_prefix=False)] = {}
+    if api_keys:
+        ensure_model_in_list(config, new_primary, api_keys)
 
     # openrouter/free smart router always leads fallbacks, then verified models
     fallbacks = ["openrouter/free"]
-    config["agents"]["defaults"]["models"]["openrouter/free"] = {}
+    if api_keys:
+        ensure_model_in_list(config, "openrouter/free", api_keys)
     for m_id in working[1:]:
-        fb = format_model_for_openclaw(m_id, with_provider_prefix=False)
+        fb = format_model_for_picoclaw(m_id, with_provider_prefix=False)
         fallbacks.append(fb)
-        config["agents"]["defaults"]["models"][fb] = {}
+        if api_keys:
+            ensure_model_in_list(config, m_id, api_keys)
 
     config["agents"]["defaults"]["model"]["fallbacks"] = fallbacks
-    save_openclaw_config(config)
+    save_picoclaw_config(config)
 
     state["rotation_count"] = state.get("rotation_count", 0) + 1
     state["last_rotation"] = datetime.now().isoformat()
@@ -340,15 +370,17 @@ def rotate_to_next_model(state: dict, reason: str = "manual", force_refresh: boo
 
 def check_and_rotate(state: dict) -> bool:
     """Check current model and rotate if needed."""
-    config = load_openclaw_config()
-    current = config.get("agents", {}).get("defaults", {}).get("model", {}).get("primary")
+    config = load_picoclaw_config()
+    current = (
+        config.get("agents", {}).get("defaults", {}).get("model", {}).get("primary")
+    )
 
     if not current:
         print("No primary model configured. Running initial setup...")
         return rotate_to_next_model(state, "initial_setup")
 
     if current.startswith("openrouter/"):
-        current_base = current[len("openrouter/"):]
+        current_base = current[len("openrouter/") :]
     else:
         current_base = current
 
@@ -381,8 +413,10 @@ def cleanup_old_rate_limits(state: dict):
     # Clean model cooldowns
     rate_limited = state.get("rate_limited_models", {})
     expired_models = [
-        m for m, t in rate_limited.items()
-        if current_time - datetime.fromisoformat(t) > timedelta(minutes=RATE_LIMIT_COOLDOWN_MINUTES)
+        m
+        for m, t in rate_limited.items()
+        if current_time - datetime.fromisoformat(t)
+        > timedelta(minutes=RATE_LIMIT_COOLDOWN_MINUTES)
     ]
     for m in expired_models:
         del rate_limited[m]
@@ -391,8 +425,10 @@ def cleanup_old_rate_limits(state: dict):
     # Clean key cooldowns
     rate_limited_keys = state.get("rate_limited_keys", {})
     expired_keys = [
-        k for k, t in rate_limited_keys.items()
-        if current_time - datetime.fromisoformat(t) > timedelta(minutes=KEY_RATE_LIMIT_COOLDOWN_MINUTES)
+        k
+        for k, t in rate_limited_keys.items()
+        if current_time - datetime.fromisoformat(t)
+        > timedelta(minutes=KEY_RATE_LIMIT_COOLDOWN_MINUTES)
     ]
     for k in expired_keys:
         del rate_limited_keys[k]
@@ -401,8 +437,10 @@ def cleanup_old_rate_limits(state: dict):
     # Expire dead model entries after TTL (OpenRouter occasionally restores models)
     dead_models = state.get("dead_models", {})
     expired_dead = [
-        m for m, t in dead_models.items()
-        if current_time - datetime.fromisoformat(t) > timedelta(hours=DEAD_MODEL_TTL_HOURS)
+        m
+        for m, t in dead_models.items()
+        if current_time - datetime.fromisoformat(t)
+        > timedelta(hours=DEAD_MODEL_TTL_HOURS)
     ]
     for m in expired_dead:
         del dead_models[m]
@@ -414,6 +452,7 @@ def cleanup_old_rate_limits(state: dict):
 def run_once():
     """Run a single check and rotate cycle."""
     from main import get_api_keys
+
     if not get_api_keys():
         print("Error: OPENROUTER_API_KEY not set")
         sys.exit(1)
@@ -426,17 +465,23 @@ def run_once():
 def run_daemon():
     """Run as a continuous daemon."""
     from main import get_api_keys
+
     if not get_api_keys():
         print("Error: OPENROUTER_API_KEY not set")
         sys.exit(1)
 
     key_count = len(get_api_keys())
-    print(f"FreeRide Watcher started ({key_count} API key{'s' if key_count > 1 else ''})")
+    print(
+        f"FreeRide Watcher started ({key_count} API key{'s' if key_count > 1 else ''})"
+    )
     print(f"Check interval: {CHECK_INTERVAL_SECONDS}s")
-    print(f"Model cooldown: {RATE_LIMIT_COOLDOWN_MINUTES}m | Key cooldown: {KEY_RATE_LIMIT_COOLDOWN_MINUTES}m")
+    print(
+        f"Model cooldown: {RATE_LIMIT_COOLDOWN_MINUTES}m | Key cooldown: {KEY_RATE_LIMIT_COOLDOWN_MINUTES}m"
+    )
     print("-" * 50)
 
     running = True
+
     def signal_handler(signum, frame):
         nonlocal running
         print("\nShutting down watcher...")
@@ -467,16 +512,20 @@ def main():
 
     parser = argparse.ArgumentParser(
         prog="freeride-watcher",
-        description="FreeRide Watcher - Monitor and auto-rotate free AI models"
+        description="FreeRide Watcher - Monitor and auto-rotate free AI models",
     )
-    parser.add_argument("--daemon", "-d", action="store_true",
-                       help="Run as continuous daemon")
-    parser.add_argument("--rotate", "-r", action="store_true",
-                       help="Force rotate to next model")
-    parser.add_argument("--status", "-s", action="store_true",
-                       help="Show watcher status")
-    parser.add_argument("--clear-cooldowns", action="store_true",
-                       help="Clear all rate limit cooldowns")
+    parser.add_argument(
+        "--daemon", "-d", action="store_true", help="Run as continuous daemon"
+    )
+    parser.add_argument(
+        "--rotate", "-r", action="store_true", help="Force rotate to next model"
+    )
+    parser.add_argument(
+        "--status", "-s", action="store_true", help="Show watcher status"
+    )
+    parser.add_argument(
+        "--clear-cooldowns", action="store_true", help="Clear all rate limit cooldowns"
+    )
 
     args = parser.parse_args()
 
@@ -515,7 +564,9 @@ def main():
         state["dead_models"] = {}
         state["invalid_keys"] = []
         save_state(state)
-        print("Cleared all model cooldowns, key cooldowns, dead models, and invalid keys.")
+        print(
+            "Cleared all model cooldowns, key cooldowns, dead models, and invalid keys."
+        )
 
     elif args.rotate:
         if not get_api_keys():
