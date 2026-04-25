@@ -1,8 +1,8 @@
 {
   "name": "freeride",
-  "displayName": "FreeRide - Free AI for OpenClaw",
+  "displayName": "FreeRide - Free AI for PicoClaw",
   "version": "1.1.0",
-  "description": "Unlimited free AI access for OpenClaw via OpenRouter's free models with automatic fallback switching",
+  "description": "Unlimited free AI access for PicoClaw via OpenRouter's free models with automatic fallback switching",
   "author": "Shaishav Pidadi",
   "repository": "https://github.com/Shaivpidadi/FreeRide",
   "license": "MIT",
@@ -32,10 +32,10 @@
     }
   },
   "network": ["openrouter.ai"],
-  "openclaw": {
+  "picoclaw": {
     "compatible": true,
     "minVersion": "1.0.0",
-    "configPath": "~/.openclaw/openclaw.json",
+    "configPath": "~/.picoclaw/config.json",
     "configKeys": [
       "agents.defaults.model",
       "agents.defaults.models"
@@ -43,5 +43,5 @@
     "requiredSecrets": ["OPENROUTER_API_KEY"],
     "networkAccess": ["openrouter.ai"]
   },
-  "install": "npx clawhub@latest install free-ride && cd ~/.openclaw/workspace/skills/free-ride && pip install -e ."
+  "install": "npx clawhub@latest install free-ride && cd ~/.picoclaw/workspace/skills/free-ride && (command -v uv >/dev/null 2>&1 && uv pip install -e . || pip install -e .)"
 }
