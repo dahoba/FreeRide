@@ -428,6 +428,7 @@ def update_model_config(
     fallback_count: int = 5,
     setup_auth: bool = False,
     append_free: bool = True,
+    verified_fallbacks: list = None,
 ) -> bool:
     """Update PicoClaw config with the specified model.
 
@@ -463,57 +464,70 @@ def update_model_config(
     # Handle fallbacks
     new_fallbacks = []
     if add_fallbacks:
-        api_key = get_api_key()
-        if api_key:
-            free_models = get_free_models(api_key)
+        # Always add openrouter/free as first fallback (smart router)
+        # Skip if it's being set as primary
+        free_router = "openrouter/free"
+        free_router_primary = format_model_for_picoclaw(
+            "openrouter/free", with_provider_prefix=False
+        )
+        if (
+            formatted_primary != free_router_primary
+            and formatted_for_list != free_router
+        ):
+            new_fallbacks.append(free_router)
+            if api_keys:
+                ensure_model_in_list(config, "openrouter/free", api_keys)
 
-            # Build new fallbacks list
-
-            # Always add openrouter/free as first fallback (smart router)
-            # Skip if it's being set as primary
-            free_router = "openrouter/free"
-            free_router_primary = format_model_for_picoclaw(
-                "openrouter/free", with_provider_prefix=False
-            )
-            if (
-                formatted_primary != free_router_primary
-                and formatted_for_list != free_router
-            ):
-                new_fallbacks.append(free_router)
-                if api_keys:
-                    ensure_model_in_list(config, "openrouter/free", api_keys)
-
-            for m in free_models:
-                # Reserve one slot for openrouter/free
+        if verified_fallbacks:
+            # Use pre-tested working models as fallbacks
+            for fb_model_id in verified_fallbacks:
                 if len(new_fallbacks) >= fallback_count:
                     break
-
-                m_formatted = format_model_for_picoclaw(
-                    m["id"], with_provider_prefix=False
+                fb_formatted = format_model_for_picoclaw(
+                    fb_model_id, with_provider_prefix=False
                 )
-                m_formatted_primary = format_model_for_picoclaw(
-                    m["id"], with_provider_prefix=False
-                )
-
-                # Skip openrouter/free (already added as first)
-                if "openrouter/free" in m["id"]:
+                # Skip if it's the new primary or already added
+                if fb_formatted == formatted_primary or fb_formatted in new_fallbacks:
                     continue
-
-                # Skip if it's the new primary
-                if as_primary and (
-                    m_formatted == formatted_for_list
-                    or m_formatted_primary == formatted_primary
-                ):
-                    continue
-
-                # Skip if it's the current primary (when adding to fallbacks only)
-                current_primary = get_current_model(config)
-                if not as_primary and m_formatted_primary == current_primary:
-                    continue
-
-                new_fallbacks.append(m_formatted)
+                new_fallbacks.append(fb_formatted)
                 if api_keys:
-                    ensure_model_in_list(config, m["id"], api_keys)
+                    ensure_model_in_list(config, fb_model_id, api_keys)
+        else:
+            # Fall back to cached model list (may include rate-limited models)
+            api_key = get_api_key()
+            if api_key:
+                free_models = get_free_models(api_key)
+
+                for m in free_models:
+                    if len(new_fallbacks) >= fallback_count:
+                        break
+
+                    m_formatted = format_model_for_picoclaw(
+                        m["id"], with_provider_prefix=False
+                    )
+                    m_formatted_primary = format_model_for_picoclaw(
+                        m["id"], with_provider_prefix=False
+                    )
+
+                    # Skip openrouter/free (already added as first)
+                    if "openrouter/free" in m["id"]:
+                        continue
+
+                    # Skip if it's the new primary
+                    if as_primary and (
+                        m_formatted == formatted_for_list
+                        or m_formatted_primary == formatted_primary
+                    ):
+                        continue
+
+                    # Skip if it's the current primary (when adding to fallbacks only)
+                    current_primary = get_current_model(config)
+                    if not as_primary and m_formatted_primary == current_primary:
+                        continue
+
+                    new_fallbacks.append(m_formatted)
+                    if api_keys:
+                        ensure_model_in_list(config, m["id"], api_keys)
 
             # If not setting as primary, prepend new model to fallbacks (after openrouter/free)
             if not as_primary:
@@ -684,15 +698,20 @@ def cmd_auto(args):
         sys.exit(1)
 
     # Test top models and pick the first available one (pre-flight health check)
+    # Test up to 30 models, but stop early if we have 5 verified fallbacks
     best_model = None
+    working_models = []  # Collect all tested-and-working models
     tested = 0
-    max_tests = 5  # Don't test more than 5 models to avoid excessive API calls
+    max_tests = 30
 
     print("Testing top models for availability...")
     for m in models:
         if "openrouter/free" in m["id"]:
             continue
         if tested >= max_tests:
+            break
+        # Stop early if we have enough working fallbacks (primary + 5 fallbacks)
+        if best_model and len(working_models) >= 5:
             break
 
         model_id = m["id"]
@@ -702,8 +721,9 @@ def cmd_auto(args):
 
         if success:
             print("OK")
-            best_model = m
-            break
+            working_models.append(model_id)
+            if not best_model:
+                best_model = m
         elif error == "rate_limit":
             print("rate limited, skipping")
         elif error == "model_not_found":
@@ -728,6 +748,8 @@ def cmd_auto(args):
         print(f"\nBest free model: {model_id}")
         print(f"Context length: {context:,} tokens")
         print(f"Quality score: {score:.3f}")
+        if working_models:
+            print(f"Verified fallbacks: {len(working_models) - 1} model(s)")
     else:
         print(f"\nKeeping current primary, adding fallbacks only.")
         print(f"Best available: {model_id} ({context:,} tokens, score: {score:.3f})")
@@ -738,6 +760,7 @@ def cmd_auto(args):
         add_fallbacks=True,
         fallback_count=args.fallback_count,
         setup_auth=args.setup_auth,
+        verified_fallbacks=working_models,
     ):
         config = load_picoclaw_config()
 
