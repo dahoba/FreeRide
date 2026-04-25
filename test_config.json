@@ -1,0 +1,28 @@
+{
+  "agents": {
+    "defaults": {
+      "model_name": "google/lyria-3-pro-preview:free"
+    }
+  },
+  "model_list": [
+    {
+      "model_name": "openrouter/free",
+      "provider": "openrouter",
+      "model": "free",
+      "api_keys": [
+        "sk-or-v1-123"
+      ]
+    },
+    {
+      "model_name": "google/lyria-3-pro-preview:free",
+      "provider": "openrouter",
+      "model": "google/lyria-3-pro-preview:free",
+      "api_keys": [
+        "sk-or-v1-123"
+      ],
+      "fallbacks": [
+        "openrouter/free"
+      ]
+    }
+  ]
+}

@@ -252,7 +252,7 @@ def save_picoclaw_config(config: dict):
 
 
 def format_model_for_picoclaw(
-    model_id: str, with_provider_prefix: bool = True, append_free: bool = True
+    model_id: str, with_provider_prefix: bool = False, append_free: bool = True
 ) -> str:
     """Format model ID for PicoClaw config.
 
@@ -288,19 +288,20 @@ def ensure_model_in_list(
     if "model_list" not in config:
         config["model_list"] = []
 
-    formatted_name = format_model_for_picoclaw(model_id, with_provider_prefix=True)
+    formatted_name = format_model_for_picoclaw(model_id, with_provider_prefix=False)
+    old_formatted_name = format_model_for_picoclaw(model_id, with_provider_prefix=True)
     native_model = (
         model_id.replace("openrouter/", "", 1)
         if model_id.startswith("openrouter/")
         else model_id
     )
 
-    for entry in config["model_list"]:
-        if entry.get("model_name") == formatted_name:
-            entry["api_keys"] = api_keys
-            if fallbacks is not None:
-                entry["fallbacks"] = fallbacks
-            return
+    # Remove any existing entries (clean or old prefixed) to avoid duplicates during migration
+    config["model_list"] = [
+        e
+        for e in config["model_list"]
+        if e.get("model_name") not in (formatted_name, old_formatted_name)
+    ]
 
     entry = {
         "model_name": formatted_name,
@@ -401,7 +402,7 @@ def update_model_config(
     api_keys = get_api_keys()
 
     formatted_primary = format_model_for_picoclaw(
-        model_id, with_provider_prefix=True, append_free=append_free
+        model_id, with_provider_prefix=False, append_free=append_free
     )
     formatted_for_list = format_model_for_picoclaw(
         model_id, with_provider_prefix=False, append_free=append_free
@@ -427,7 +428,7 @@ def update_model_config(
             # Skip if it's being set as primary
             free_router = "openrouter/free"
             free_router_primary = format_model_for_picoclaw(
-                "openrouter/free", with_provider_prefix=True
+                "openrouter/free", with_provider_prefix=False
             )
             if (
                 formatted_primary != free_router_primary
@@ -446,7 +447,7 @@ def update_model_config(
                     m["id"], with_provider_prefix=False
                 )
                 m_formatted_primary = format_model_for_picoclaw(
-                    m["id"], with_provider_prefix=True
+                    m["id"], with_provider_prefix=False
                 )
 
                 # Skip openrouter/free (already added as first)
@@ -531,7 +532,7 @@ def cmd_list(args):
             context_str = f"{context} tokens"
 
         # Check status
-        formatted = format_model_for_picoclaw(model_id, with_provider_prefix=True)
+        formatted = format_model_for_picoclaw(model_id, with_provider_prefix=False)
         formatted_fallback = format_model_for_picoclaw(
             model_id, with_provider_prefix=False
         )
@@ -805,7 +806,7 @@ def cmd_fallbacks(args):
     # Always add openrouter/free as first fallback (smart router)
     free_router = "openrouter/free"
     free_router_primary = format_model_for_picoclaw(
-        "openrouter/free", with_provider_prefix=True
+        "openrouter/free", with_provider_prefix=False
     )
     if not current or current != free_router_primary:
         fallbacks.append(free_router)
@@ -815,7 +816,7 @@ def cmd_fallbacks(args):
     for m in models:
         formatted = format_model_for_picoclaw(m["id"], with_provider_prefix=False)
         formatted_primary = format_model_for_picoclaw(
-            m["id"], with_provider_prefix=True
+            m["id"], with_provider_prefix=False
         )
 
         if current and (formatted_primary == current):

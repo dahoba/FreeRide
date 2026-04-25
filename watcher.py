@@ -340,7 +340,7 @@ def rotate_to_next_model(
 
     api_keys = get_api_keys()
     formatted_primary = format_model_for_picoclaw(
-        new_primary, with_provider_prefix=True
+        new_primary, with_provider_prefix=False
     )
     # V2: model_name is a simple string
     config["agents"]["defaults"]["model_name"] = formatted_primary
