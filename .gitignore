@@ -2,3 +2,7 @@
 worktrees/
 __pycache__/
 .ruff_cache/
+*.egg-info/
+test*.py
+test*.json
+plan-*.md
