@@ -287,7 +287,7 @@ def rotate_to_next_model(
     new_primary = working[0]
     print(f"  New model: {new_primary}")
 
-    api_keys = get_api_keys()
+    api_key = get_api_key()
     formatted_primary = format_model_for_picoclaw(
         new_primary, with_provider_prefix=False
     )
@@ -301,11 +301,11 @@ def rotate_to_next_model(
         fallbacks.append(fb)
 
     # Attach fallbacks to the primary model's entry in model_list (V2 schema)
-    if api_keys:
-        ensure_model_in_list(config, new_primary, api_keys, fallbacks=fallbacks)
-        ensure_model_in_list(config, "openrouter/free", api_keys)
+    if api_key:
+        ensure_model_in_list(config, new_primary, api_key, fallbacks=fallbacks)
+        ensure_model_in_list(config, "openrouter/free", api_key)
         for m_id in working[1:]:
-            ensure_model_in_list(config, m_id, api_keys)
+            ensure_model_in_list(config, m_id, api_key)
 
     # Clean up legacy V1 schema keys
     config["agents"]["defaults"].pop("model", None)

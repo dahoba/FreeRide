@@ -346,7 +346,7 @@ def format_model_for_picoclaw(
 
 
 def ensure_model_in_list(
-    config: dict, model_id: str, api_keys: list, fallbacks: list = None
+    config: dict, model_id: str, api_key: str, fallbacks: list = None
 ):
     """Ensure a model configuration exists inside PicoClaw's model_list."""
     if "model_list" not in config:
@@ -371,7 +371,7 @@ def ensure_model_in_list(
         "model_name": formatted_name,
         "provider": "openrouter",
         "model": format_model_for_picoclaw(model_id, with_provider_prefix=True),
-        "api_keys": api_keys,
+        "api_key": api_key,
     }
     if fallbacks is not None:
         entry["fallbacks"] = fallbacks
@@ -447,7 +447,7 @@ def update_model_config(
     fallback_count: int = 5,
     setup_auth: bool = False,
     append_free: bool = True,
-    verified_fallbacks: list = None,
+    verified_models: dict = None,
 ) -> bool:
     """Update PicoClaw config with the specified model.
 
@@ -457,6 +457,7 @@ def update_model_config(
         add_fallbacks: If True, also configure fallback models
         fallback_count: Number of fallback models to add
         setup_auth: If True, also set up OpenRouter auth profile
+        verified_models: Dict mapping model_id -> working_api_key from health checks
     """
     config = load_picoclaw_config()
     config = ensure_config_structure(config)
@@ -464,7 +465,10 @@ def update_model_config(
     if setup_auth:
         config = setup_openrouter_auth(config)
 
-    api_keys = get_api_keys()
+    # Use the working key for this model if available, otherwise fall back to first key
+    primary_key = get_api_key()
+    if verified_models and model_id in verified_models:
+        primary_key = verified_models[model_id]
 
     formatted_primary = format_model_for_picoclaw(
         model_id, with_provider_prefix=False, append_free=append_free
@@ -476,9 +480,9 @@ def update_model_config(
     if as_primary:
         # Set as primary model (V2: model_name is a string)
         config["agents"]["defaults"]["model_name"] = formatted_primary
-        # Ensure model exists in PicoClaw V2 model_list
-        if api_keys:
-            ensure_model_in_list(config, model_id, api_keys)
+        # Ensure model exists in PicoClaw V2 model_list with working key
+        if primary_key:
+            ensure_model_in_list(config, model_id, primary_key)
 
     # Handle fallbacks
     new_fallbacks = []
@@ -494,12 +498,12 @@ def update_model_config(
             and formatted_for_list != free_router
         ):
             new_fallbacks.append(free_router)
-            if api_keys:
-                ensure_model_in_list(config, "openrouter/free", api_keys)
+            if primary_key:
+                ensure_model_in_list(config, "openrouter/free", primary_key)
 
-        if verified_fallbacks:
-            # Use pre-tested working models as fallbacks
-            for fb_model_id in verified_fallbacks:
+        if verified_models:
+            # Use pre-tested working models as fallbacks with their specific keys
+            for fb_model_id, fb_api_key in verified_models.items():
                 if len(new_fallbacks) >= fallback_count:
                     break
                 fb_formatted = format_model_for_picoclaw(
@@ -509,8 +513,8 @@ def update_model_config(
                 if fb_formatted == formatted_primary or fb_formatted in new_fallbacks:
                     continue
                 new_fallbacks.append(fb_formatted)
-                if api_keys:
-                    ensure_model_in_list(config, fb_model_id, api_keys)
+                if fb_api_key:
+                    ensure_model_in_list(config, fb_model_id, fb_api_key)
         else:
             # Fall back to cached model list (may include rate-limited models)
             api_key = get_api_key()
@@ -545,8 +549,8 @@ def update_model_config(
                         continue
 
                     new_fallbacks.append(m_formatted)
-                    if api_keys:
-                        ensure_model_in_list(config, m["id"], api_keys)
+                    if api_key:
+                        ensure_model_in_list(config, m["id"], api_key)
 
             # If not setting as primary, prepend new model to fallbacks (after openrouter/free)
             if not as_primary:
@@ -554,12 +558,12 @@ def update_model_config(
                     # Insert after openrouter/free if present
                     insert_pos = 1 if free_router in new_fallbacks else 0
                     new_fallbacks.insert(insert_pos, formatted_for_list)
-                if api_keys:
-                    ensure_model_in_list(config, model_id, api_keys)
+                if primary_key:
+                    ensure_model_in_list(config, model_id, primary_key)
 
     # Attach fallbacks to the primary model's entry in model_list (V2 schema)
-    if as_primary and api_keys:
-        ensure_model_in_list(config, model_id, api_keys, fallbacks=new_fallbacks)
+    if as_primary and primary_key:
+        ensure_model_in_list(config, model_id, primary_key, fallbacks=new_fallbacks)
 
     # Clean up legacy V1 schema keys
     config["agents"]["defaults"].pop("model", None)
@@ -719,7 +723,7 @@ def cmd_auto(args):
     # Test top models and pick the first available one (pre-flight health check)
     # Test up to 30 models, but stop early if we have 5 verified fallbacks
     best_model = None
-    working_models = []  # Collect all tested-and-working models
+    working_models = {}  # model_id -> working_api_key
     tested = 0
     max_tests = 30
 
@@ -740,7 +744,7 @@ def cmd_auto(args):
 
         if success:
             print("OK")
-            working_models.append(model_id)
+            working_models[model_id] = working_key
             if not best_model:
                 best_model = m
         elif error == "rate_limit":
@@ -779,7 +783,7 @@ def cmd_auto(args):
         add_fallbacks=True,
         fallback_count=args.fallback_count,
         setup_auth=args.setup_auth,
-        verified_fallbacks=working_models,
+        verified_models=working_models,
     ):
         config = load_picoclaw_config()
 
@@ -908,7 +912,7 @@ def cmd_fallbacks(args):
 
     # Get fallbacks excluding current model
     fallbacks = []
-    api_keys = get_api_keys()
+    api_key = get_api_key()
 
     # Always add openrouter/free as first fallback (smart router)
     free_router = "openrouter/free"
@@ -917,8 +921,8 @@ def cmd_fallbacks(args):
     )
     if not current or current != free_router_primary:
         fallbacks.append(free_router)
-        if api_keys:
-            ensure_model_in_list(config, "openrouter/free", api_keys)
+        if api_key:
+            ensure_model_in_list(config, "openrouter/free", api_key)
 
     for m in models:
         formatted = format_model_for_picoclaw(m["id"], with_provider_prefix=False)
@@ -935,15 +939,15 @@ def cmd_fallbacks(args):
             break
 
         fallbacks.append(formatted)
-        if api_keys:
-            ensure_model_in_list(config, m["id"], api_keys)
+        if api_key:
+            ensure_model_in_list(config, m["id"], api_key)
 
     # Attach fallbacks to the current primary model's entry in model_list (V2 schema)
-    if current and api_keys:
+    if current and api_key:
         # We need the raw model_id for the current model to call ensure_model_in_list
         # The current value is already formatted with provider prefix
         current_model_id = current
-        ensure_model_in_list(config, current_model_id, api_keys, fallbacks=fallbacks)
+        ensure_model_in_list(config, current_model_id, api_key, fallbacks=fallbacks)
 
     # Clean up legacy V1 schema keys
     config["agents"]["defaults"].pop("model", None)
