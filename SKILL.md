@@ -9,7 +9,7 @@ env:
 network:
   - openrouter.ai
 writes:
-  - ~/.picoclaw/config.json (keys: agents.defaults.model, agents.defaults.models only)
+  - ~/.picoclaw/config.json (keys: agents.defaults.model_name, model_list only)
   - ~/.picoclaw/.freeride-cache.json
   - ~/.picoclaw/.freeride-watcher-state.json
 install: uv pip install -e . (or pip install -e .)
@@ -75,9 +75,8 @@ Verify by telling the user to send `/status` to check the active model.
 
 FreeRide updates these keys in `~/.picoclaw/config.json`:
 
-- `agents.defaults.model.primary` — e.g. `openrouter/qwen/qwen3-coder:free`
-- `agents.defaults.model.fallbacks` — e.g. `["openrouter/free", "nvidia/nemotron:free", ...]`
-- `model_list` — PicoClaw V2 model entries with `provider`, `model`, and `api_keys`
+- `agents.defaults.model_name` — e.g. `openrouter/qwen/qwen3-coder:free`
+- `model_list` — PicoClaw V2 model entries with `provider`, `model`, `api_keys`, and inline `fallbacks`
 
 Everything else (gateway, channels, plugins, env, customInstructions, named agents) is preserved.
 

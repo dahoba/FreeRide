@@ -281,7 +281,9 @@ def format_model_for_picoclaw(
     return base_id
 
 
-def ensure_model_in_list(config: dict, model_id: str, api_keys: list):
+def ensure_model_in_list(
+    config: dict, model_id: str, api_keys: list, fallbacks: list = None
+):
     """Ensure a model configuration exists inside PicoClaw's model_list."""
     if "model_list" not in config:
         config["model_list"] = []
@@ -296,29 +298,47 @@ def ensure_model_in_list(config: dict, model_id: str, api_keys: list):
     for entry in config["model_list"]:
         if entry.get("model_name") == formatted_name:
             entry["api_keys"] = api_keys
+            if fallbacks is not None:
+                entry["fallbacks"] = fallbacks
             return
 
-    config["model_list"].append(
-        {
-            "model_name": formatted_name,
-            "provider": "openrouter",
-            "model": native_model,
-            "api_keys": api_keys,
-        }
-    )
+    entry = {
+        "model_name": formatted_name,
+        "provider": "openrouter",
+        "model": native_model,
+        "api_keys": api_keys,
+    }
+    if fallbacks is not None:
+        entry["fallbacks"] = fallbacks
+    config["model_list"].append(entry)
 
 
 def get_current_model(config: dict = None) -> Optional[str]:
-    """Get currently configured model in PicoClaw."""
+    """Get currently configured model in PicoClaw (V2 schema)."""
     if config is None:
         config = load_picoclaw_config()
+    # V2: agents.defaults.model_name is a string
+    model_name = config.get("agents", {}).get("defaults", {}).get("model_name")
+    if model_name:
+        return model_name
+    # Backward compatibility: V1 used agents.defaults.model.primary
     return config.get("agents", {}).get("defaults", {}).get("model", {}).get("primary")
 
 
 def get_current_fallbacks(config: dict = None) -> list:
-    """Get currently configured fallback models."""
+    """Get currently configured fallback models (V2 schema).
+
+    In PicoClaw V2, fallbacks are attached to the model entry in model_list.
+    """
     if config is None:
         config = load_picoclaw_config()
+    current = get_current_model(config)
+    if not current:
+        return []
+    for entry in config.get("model_list", []):
+        if entry.get("model_name") == current:
+            return entry.get("fallbacks", [])
+    # Backward compatibility: V1 used agents.defaults.model.fallbacks
     return (
         config.get("agents", {})
         .get("defaults", {})
@@ -333,10 +353,8 @@ def ensure_config_structure(config: dict) -> dict:
         config["agents"] = {}
     if "defaults" not in config["agents"]:
         config["agents"]["defaults"] = {}
-    if "model" not in config["agents"]["defaults"]:
-        config["agents"]["defaults"]["model"] = {}
-    if "models" not in config["agents"]["defaults"]:
-        config["agents"]["defaults"]["models"] = {}
+    if "model_list" not in config:
+        config["model_list"] = []
     return config
 
 
@@ -390,25 +408,20 @@ def update_model_config(
     )
 
     if as_primary:
-        # Set as primary model
-        config["agents"]["defaults"]["model"]["primary"] = formatted_primary
+        # Set as primary model (V2: model_name is a string)
+        config["agents"]["defaults"]["model_name"] = formatted_primary
         # Ensure model exists in PicoClaw V2 model_list
         if api_keys:
             ensure_model_in_list(config, model_id, api_keys)
 
     # Handle fallbacks
+    new_fallbacks = []
     if add_fallbacks:
         api_key = get_api_key()
         if api_key:
             free_models = get_free_models(api_key)
 
-            # Get existing fallbacks
-            existing_fallbacks = config["agents"]["defaults"]["model"].get(
-                "fallbacks", []
-            )
-
             # Build new fallbacks list
-            new_fallbacks = []
 
             # Always add openrouter/free as first fallback (smart router)
             # Skip if it's being set as primary
@@ -448,9 +461,7 @@ def update_model_config(
                     continue
 
                 # Skip if it's the current primary (when adding to fallbacks only)
-                current_primary = config["agents"]["defaults"]["model"].get(
-                    "primary", ""
-                )
+                current_primary = get_current_model(config)
                 if not as_primary and m_formatted_primary == current_primary:
                     continue
 
@@ -467,7 +478,13 @@ def update_model_config(
                 if api_keys:
                     ensure_model_in_list(config, model_id, api_keys)
 
-            config["agents"]["defaults"]["model"]["fallbacks"] = new_fallbacks
+    # Attach fallbacks to the primary model's entry in model_list (V2 schema)
+    if as_primary and api_keys:
+        ensure_model_in_list(config, model_id, api_keys, fallbacks=new_fallbacks)
+
+    # Clean up legacy V1 schema keys
+    config["agents"]["defaults"].pop("model", None)
+    config["agents"]["defaults"].pop("models", None)
 
     save_picoclaw_config(config)
     return True
@@ -813,7 +830,17 @@ def cmd_fallbacks(args):
         if api_keys:
             ensure_model_in_list(config, m["id"], api_keys)
 
-    config["agents"]["defaults"]["model"]["fallbacks"] = fallbacks
+    # Attach fallbacks to the current primary model's entry in model_list (V2 schema)
+    if current and api_keys:
+        # We need the raw model_id for the current model to call ensure_model_in_list
+        # The current value is already formatted with provider prefix
+        current_model_id = current
+        ensure_model_in_list(config, current_model_id, api_keys, fallbacks=fallbacks)
+
+    # Clean up legacy V1 schema keys
+    config["agents"]["defaults"].pop("model", None)
+    config["agents"]["defaults"].pop("models", None)
+
     save_picoclaw_config(config)
 
     print(f"\nConfigured {len(fallbacks)} fallback models:")

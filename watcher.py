@@ -290,9 +290,12 @@ def rotate_to_next_model(
 
     config = load_picoclaw_config()
     config = ensure_config_structure(config)
-    current = (
-        config.get("agents", {}).get("defaults", {}).get("model", {}).get("primary")
-    )
+    current = config.get("agents", {}).get("defaults", {}).get("model_name")
+    # Backward compatibility with V1 schema
+    if not current:
+        current = (
+            config.get("agents", {}).get("defaults", {}).get("model", {}).get("primary")
+        )
 
     current_base = None
     if current:
@@ -339,21 +342,26 @@ def rotate_to_next_model(
     formatted_primary = format_model_for_picoclaw(
         new_primary, with_provider_prefix=True
     )
-    config["agents"]["defaults"]["model"]["primary"] = formatted_primary
-    if api_keys:
-        ensure_model_in_list(config, new_primary, api_keys)
+    # V2: model_name is a simple string
+    config["agents"]["defaults"]["model_name"] = formatted_primary
 
     # openrouter/free smart router always leads fallbacks, then verified models
     fallbacks = ["openrouter/free"]
-    if api_keys:
-        ensure_model_in_list(config, "openrouter/free", api_keys)
     for m_id in working[1:]:
         fb = format_model_for_picoclaw(m_id, with_provider_prefix=False)
         fallbacks.append(fb)
-        if api_keys:
+
+    # Attach fallbacks to the primary model's entry in model_list (V2 schema)
+    if api_keys:
+        ensure_model_in_list(config, new_primary, api_keys, fallbacks=fallbacks)
+        ensure_model_in_list(config, "openrouter/free", api_keys)
+        for m_id in working[1:]:
             ensure_model_in_list(config, m_id, api_keys)
 
-    config["agents"]["defaults"]["model"]["fallbacks"] = fallbacks
+    # Clean up legacy V1 schema keys
+    config["agents"]["defaults"].pop("model", None)
+    config["agents"]["defaults"].pop("models", None)
+
     save_picoclaw_config(config)
 
     state["rotation_count"] = state.get("rotation_count", 0) + 1
@@ -371,9 +379,12 @@ def rotate_to_next_model(
 def check_and_rotate(state: dict) -> bool:
     """Check current model and rotate if needed."""
     config = load_picoclaw_config()
-    current = (
-        config.get("agents", {}).get("defaults", {}).get("model", {}).get("primary")
-    )
+    current = config.get("agents", {}).get("defaults", {}).get("model_name")
+    # Backward compatibility with V1 schema
+    if not current:
+        current = (
+            config.get("agents", {}).get("defaults", {}).get("model", {}).get("primary")
+        )
 
     if not current:
         print("No primary model configured. Running initial setup...")

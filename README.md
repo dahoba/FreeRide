@@ -213,7 +213,7 @@ That's the whole point. FreeRide configures multiple fallbacks. When one model r
 
 **Will it mess up my PicoClaw config?**
 
-No. FreeRide only touches `agents.defaults.model`, `agents.defaults.models`, and `model_list`. Your gateway, channels, plugins, workspace, customInstructions - all preserved.
+No. FreeRide only touches `agents.defaults.model_name` and `model_list`. Your gateway, channels, plugins, workspace, customInstructions - all preserved.
 
 **Which models are free?**
 

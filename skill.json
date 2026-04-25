@@ -37,8 +37,8 @@
     "minVersion": "1.0.0",
     "configPath": "~/.picoclaw/config.json",
     "configKeys": [
-      "agents.defaults.model",
-      "agents.defaults.models"
+      "agents.defaults.model_name",
+      "model_list"
     ],
     "requiredSecrets": ["OPENROUTER_API_KEY"],
     "networkAccess": ["openrouter.ai"]

@@ -14,6 +14,6 @@ This file contains crucial context for AI agents working on the FreeRide reposit
 - **Integration Testing**: To test with PicoClaw, you must have PicoClaw installed.
 
 ## Crucial Quirks & Workflows
-- **Configuration Target**: The skill writes to `~/.picoclaw/config.json`, specifically modifying `agents.defaults.model` and `agents.defaults.models`.
+- **Configuration Target**: The skill writes to `~/.picoclaw/config.json`, specifically modifying `agents.defaults.model_name` and `model_list` entries (including their inline `fallbacks` arrays).
 - **Restart Requirement**: After any code changes that affect configuration written to `config.json` (or manual test executions like `freeride auto`), you **MUST** run `picoclaw gateway restart` for PicoClaw to pick up the changes.
 - **State Files**: Watcher state and caches are stored in `~/.picoclaw/.freeride-watcher-state.json` and `~/.picoclaw/.freeride-cache.json`.
