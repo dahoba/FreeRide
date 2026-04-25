@@ -154,6 +154,25 @@ def test_model(api_key: str, model_id: str) -> tuple[bool, Optional[str]]:
         return False, "request_error"
 
 
+def test_model_all_keys(model_id: str) -> tuple[bool, Optional[str], Optional[str]]:
+    """Test if a model is available, trying all API keys on 429.
+    Returns (success, error, working_key).
+    """
+    keys = get_api_keys()
+    if not keys:
+        return False, "no_keys", None
+
+    for key in keys:
+        success, error = test_model(key, model_id)
+        if success:
+            return True, None, key
+        if error != "rate_limit":
+            return False, error, key  # non-key error (not_found, unavailable, etc)
+        # 429: try next key
+
+    return False, "rate_limit", None  # all keys exhausted with 429
+
+
 def fetch_all_models(api_key: str) -> list:
     """Fetch all models from OpenRouter API."""
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -716,7 +735,7 @@ def cmd_auto(args):
 
         model_id = m["id"]
         print(f"  Testing {model_id}...", end=" ", flush=True)
-        success, error = test_model(api_key, model_id)
+        success, error, working_key = test_model_all_keys(model_id)
         tested += 1
 
         if success:
@@ -725,7 +744,7 @@ def cmd_auto(args):
             if not best_model:
                 best_model = m
         elif error == "rate_limit":
-            print("rate limited, skipping")
+            print("rate limited (all keys), skipping")
         elif error == "model_not_found":
             print("not found, skipping")
         else:
