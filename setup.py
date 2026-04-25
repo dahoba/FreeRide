@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="freeride",
     version="1.1.0",
-    description="Free AI for OpenClaw - Automatic free model management via OpenRouter",
+    description="Free AI for PicoClaw - Automatic free model management via OpenRouter",
     author="Shaishav Pidadi",
     url="https://github.com/Shaivpidadi/FreeRide",
     py_modules=["main", "watcher"],
