@@ -8,10 +8,10 @@
 [![ClawHub Version](https://api.clawhub-badge.xyz/badge/free-ride/version.svg)](https://clawhub.ai/skills/free-ride)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![OpenClaw Compatible](https://img.shields.io/badge/OpenClaw-Compatible-blue.svg)](https://github.com/openclaw/openclaw)
+[![PicoClaw Compatible](https://img.shields.io/badge/PicoClaw-Compatible-blue.svg)](https://github.com/openclaw/openclaw)
 ---
 
-**FreeRide** gives you unlimited free AI in [OpenClaw](https://github.com/openclaw/openclaw) by automatically managing OpenRouter's free models.
+**FreeRide** gives you unlimited free AI in [PicoClaw](https://github.com/openclaw/openclaw) by automatically managing OpenRouter's free models.
 
 ```
 You: *hits rate limit*
@@ -21,7 +21,7 @@ You: *keeps coding*
 
 ## The Problem
 
-You're using OpenClaw. You love it. But:
+You're using PicoClaw. You love it. But:
 
 - 💸 API costs add up fast
 - 🚫 Free models have rate limits
@@ -42,14 +42,14 @@ That's it. FreeRide:
 2. **Ranks** them by quality (context length, capabilities, speed)
 3. **Sets** the best one as your primary
 4. **Configures** smart fallbacks for when you hit rate limits
-5. **Preserves** your existing OpenClaw config
+5. **Preserves** your existing PicoClaw config
 
 ## Installation
 
 ```bash
 npx clawhub@latest install free-ride
-cd ~/.openclaw/workspace/skills/free-ride
-pip install -e .
+cd ~/.picoclaw/workspace/skills/free-ride
+uv pip install -e .  # or: pip install -e .
 ```
 
 That's it. `freeride` and `freeride-watcher` are now available as global commands.
@@ -69,10 +69,10 @@ export OPENROUTER_API_KEY="sk-or-v1-..."   OR
 export OPENROUTER_API_KEY=["sk-or-v1-...","sk-or-v2-..." ] # By passing multiple keys it swaps the key on 429 
 ```
 
-Or add it to your OpenClaw config:
+Or add it to your PicoClaw config:
 
 ```bash
-openclaw config set env.OPENROUTER_API_KEY "sk-or-v1-..."
+picoclaw config set env.OPENROUTER_API_KEY "sk-or-v1-..."
 ```
 
 ### 3. Run FreeRide
@@ -81,10 +81,10 @@ openclaw config set env.OPENROUTER_API_KEY "sk-or-v1-..."
 freeride auto
 ```
 
-### 4. Restart OpenClaw
+### 4. Restart PicoClaw
 
 ```bash
-openclaw gateway restart
+picoclaw gateway restart
 ```
 
 ### 5. Verify It Works
@@ -111,7 +111,7 @@ Fallbacks:
   5. mistral/mistral:free     ← Reliable fallback
 ```
 
-When you hit a rate limit, OpenClaw automatically tries the next model. You keep working. No interruptions.
+When you hit a rate limit, PicoClaw automatically tries the next model. You keep working. No interruptions.
 
 ## Commands
 
@@ -139,8 +139,8 @@ freeride switch qwen3-coder
 # See what's available:
 freeride list -n 30
 
-# Always restart OpenClaw after changes:
-openclaw gateway restart
+# Always restart PicoClaw after changes:
+picoclaw gateway restart
 ```
 
 ## How It Ranks Models
@@ -156,19 +156,19 @@ FreeRide scores each model (0-1) based on:
 
 The **smart fallback** `openrouter/free` is always first - it auto-selects based on what your request needs.
 
-## Testing with Your OpenClaw Agent
+## Testing with Your PicoClaw Agent
 
-After running `freeride auto` and `openclaw gateway restart`:
+After running `freeride auto` and `picoclaw gateway restart`:
 
 ```bash
-# Check OpenClaw sees the models
-openclaw models list
+# Check PicoClaw sees the models
+picoclaw models list
 
 # Validate config
-openclaw doctor --fix
+picoclaw doctor --fix
 
 # Open the dashboard and chat
-openclaw dashboard
+picoclaw dashboard
 # Or message your agent on WhatsApp/Telegram/Discord
 ```
 
@@ -209,19 +209,19 @@ Yes. OpenRouter provides free tiers for many models. You just need an account (n
 
 **What about rate limits?**
 
-That's the whole point. FreeRide configures multiple fallbacks. When one model rate-limits you, OpenClaw automatically switches to the next.
+That's the whole point. FreeRide configures multiple fallbacks. When one model rate-limits you, PicoClaw automatically switches to the next.
 
-**Will it mess up my OpenClaw config?**
+**Will it mess up my PicoClaw config?**
 
-No. FreeRide only touches `agents.defaults.model` and `agents.defaults.models`. Your gateway, channels, plugins, workspace, customInstructions - all preserved.
+No. FreeRide only touches `agents.defaults.model`, `agents.defaults.models`, and `model_list`. Your gateway, channels, plugins, workspace, customInstructions - all preserved.
 
 **Which models are free?**
 
 Run `freeride list` to see current availability. It changes, which is why FreeRide exists.
 
-**Do I need to restart OpenClaw after changes?**
+**Do I need to restart PicoClaw after changes?**
 
-Yes. Run `openclaw gateway restart` after any FreeRide command that changes your config.
+Yes. Run `picoclaw gateway restart` after any FreeRide command that changes your config.
 
 ## The Math
 
@@ -229,13 +229,13 @@ Yes. Run `openclaw gateway restart` after any FreeRide command that changes your
 |----------|--------------|
 | GPT-4 API | $50-200+ |
 | Claude API | $50-200+ |
-| OpenClaw + FreeRide | **$0** |
+| PicoClaw + FreeRide | **$0** |
 
 You're welcome.
 
 ## Requirements
 
-- [OpenClaw](https://github.com/openclaw/openclaw) installed (Node ≥22)
+- [PicoClaw](https://github.com/openclaw/openclaw) installed (Node ≥22)
 - Python 3.8+
 - Free OpenRouter account ([get key](https://openrouter.ai/keys))
 
@@ -252,15 +252,15 @@ You're welcome.
                             │
                             ▼
                      ┌──────────────┐
-                     │ ~/.openclaw/ │
-                     │ openclaw.json│
+                      │ ~/.picoclaw/ │
+                      │ config.json  │
                      └──────┬───────┘
                             │
-                     openclaw gateway restart
+                     picoclaw gateway restart
                             │
                             ▼
                      ┌──────────────┐
-                     │  OpenClaw    │
+                     │  PicoClaw    │
                      │  (free AI!)  │
                      └──────────────┘
 ```
@@ -270,7 +270,7 @@ You're welcome.
 Found a bug? Want a feature? PRs welcome.
 
 ```bash
-cd ~/.openclaw/workspace/skills/free-ride
+cd ~/.picoclaw/workspace/skills/free-ride
 
 # Test commands
 freeride list
@@ -280,7 +280,7 @@ freeride auto --help
 
 ## Related Projects
 
-- [OpenClaw](https://github.com/openclaw/openclaw) - The AI coding agent
+- [PicoClaw](https://github.com/openclaw/openclaw) - The AI coding agent
 - [OpenRouter](https://openrouter.ai) - The model router
 - [ClawHub](https://github.com/clawhub) - Skill marketplace
 
@@ -298,5 +298,5 @@ MIT - Do whatever you want.
   ·
   <a href="https://openrouter.ai/keys">🔑 Get OpenRouter Key</a>
   ·
-  <a href="https://github.com/openclaw/openclaw">🦞 Install OpenClaw</a>
+  <a href="https://github.com/openclaw/openclaw">🦞 Install PicoClaw</a>
 </p>
