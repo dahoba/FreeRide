@@ -96,7 +96,7 @@ freeride-watcher --status    # Check rotation history
 
 | Problem | Fix |
 |---------|-----|
-| `freeride: command not found` | `cd ~/.picoclaw/workspace/skills/free-ride` then `uv pip install -e .` (or `pip install -e .`) |
+| `freeride: command not found` | `cd ~/.picoclaw/workspace/skills/free-ride` then `source .venv/bin/activate` then try execute again|
 | `OPENROUTER_API_KEY not set` | User needs a key from https://openrouter.ai/keys |
 | Changes not taking effect | `picoclaw gateway restart` then `/new` for fresh session |
 | Agent shows 0 tokens | Check `freeride status` — primary should be `openrouter/<provider>/<model>:free` |
